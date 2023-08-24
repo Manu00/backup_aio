@@ -1,0 +1,22 @@
+# backup-aio.conf
+
+# Replace "YOUR_DESTINATION_IP" with the actual IP address of the destination PC
+DESTINATION_IP="YOUR_DESTINATION_IP"
+
+# Replace "YOUR_DESTINATION_USER" with the actual username on the destination PC
+DESTINATION_USER="YOUR_DESTINATION_USER"
+
+# Replace "YOUR_DESTINATION_FOLDER" with the actual destination folder path
+DESTINATION_FOLDER="/path/to/destination"
+
+# List of source directories (each directory in a new line)
+SOURCE_DIRS=(
+  "/path/to/source1"
+  "/path/to/source2"
+  "/path/to/source3"
+)
+
+# Replace "YOUR_HEALTHCHECKS_IO_UUID" with your actual healthchecks.io UUID
+HEALTHCHECKS_IO_UUID="YOUR_HEALTHCHECKS_IO_UUID"
+
+# 
