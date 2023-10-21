@@ -7,7 +7,10 @@ source backup-aio.conf
 DESTINATION_DIR="$DESTINATION_USER@$DESTINATION_IP:$DESTINATION_FOLDER"
 
 # Rsync options: -a (archive mode), -v (verbose), -h (human-readable)
-RSYNC_OPTIONS="-avh --delete"
+RSYNC_OPTIONS="-av --delete"
+
+# Array to collect backup results
+backup_results=()
 
 # Function to display status message in green
 function display_success {
@@ -20,26 +23,64 @@ function display_error {
 }
 
 # Function to send notification to healthchecks.io
-function send_notification {
+function send_healthcheck_notification {
     curl -fsS -m 10 --retry 5 "$HEALTHCHECKS_IO_URL" > /dev/null
 }
+
+# Function to send Telegram notification
+function send_telegram_notification {
+    local message="$1"
+    curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_API_TOKEN/sendMessage" -d "chat_id=$TELEGRAM_CHAT_ID&text=$message&parse_mode=Markdown" > /dev/null
+}
+
+# Get start time
+START_TIME=$(date +"%s")
 
 # Loop through each source directory and perform backup
 for SOURCE_DIR in "${SOURCE_DIRS[@]}"
 do
-  display_success "Backing up: $SOURCE_DIR"
+    display_success "Backing up: $SOURCE_DIR"
 
-  # Run rsync command to synchronize data
-  rsync $RSYNC_OPTIONS "$SOURCE_DIR" "$DESTINATION_DIR"
+    # Run rsync command to synchronize data
+    result=""
+    rsync_output=$(rsync $RSYNC_OPTIONS "$SOURCE_DIR" "$DESTINATION_DIR" 2>&1)
 
-  if [ $? -eq 0 ]; then
-      display_success "Backup completed: $SOURCE_DIR"
-  else
-      display_error "Backup failed: $SOURCE_DIR"
-      send_notification
-      exit 1
-  fi
+    if [ $? -eq 0 ]; then
+        display_success "Backup completed: $SOURCE_DIR"
+
+        result="*Backup completed*: $SOURCE_DIR%0A"
+        result+="Amount sent: + $(echo "$rsync_output" | grep -oP 'sent \K[0-9]+')%0A"
+        result+="Total Size: + $(echo "$rsync_output" | grep -oP 'total size is \K[0-9]+')%0A"
+    else
+        display_error "Backup failed: $SOURCE_DIR"
+        result="*Backup failed*: $SOURCE_DIR"
+        send_healthcheck_notification
+        send_telegram_notification "Backup failed for $SOURCE_DIR"
+        exit 1
+    fi
+
+    backup_results+=("$result")
 done
 
 display_success "All backups completed successfully!"
 
+# Get end time
+END_TIME=$(date +"%s")
+
+# Calculate time taken
+ELAPSED_TIME=$((END_TIME - START_TIME))
+
+# Format time taken
+ELAPSED_TIME_FORMATTED=$(date -d@$ELAPSED_TIME -u +%H:%M:%S)
+
+# Prepare summary message
+summary_message="*Backup summary:*%0A%0A"
+
+for backup_result in "${backup_results[@]}"; do
+    summary_message+="• $backup_result%0A"
+done
+
+summary_message+="_Time taken:_ $ELAPSED_TIME_FORMATTED"
+
+# Send summary notification
+send_telegram_notification "$summary_message"
