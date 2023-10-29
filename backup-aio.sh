@@ -6,7 +6,7 @@ source backup-aio.conf
 # Destination directory (the location where you want to store the backup)
 DESTINATION_DIR="$DESTINATION_USER@$DESTINATION_IP:$DESTINATION_FOLDER"
 
-# Rsync options: -a (archive mode), -v (verbose), -h (human-readable)
+# Rsync options: -a (archive mode), -v (verbose)
 RSYNC_OPTIONS="-av --delete"
 
 # Array to collect backup results
@@ -33,6 +33,23 @@ function send_telegram_notification {
     curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_API_TOKEN/sendMessage" -d "chat_id=$TELEGRAM_CHAT_ID&text=$message&parse_mode=Markdown" > /dev/null
 }
 
+convert_bytes() {
+    local bytes="$1"
+    local result=""
+
+    if ((bytes < 1024)); then
+        result="${bytes} bytes"
+    elif ((bytes < 1048576)); then
+        result="$(bc -l <<< "scale=2; $bytes / 1024") KB"
+    elif ((bytes < 1073741824)); then
+        result="$(bc -l <<< "scale=2; $bytes / 1048576") MB"
+    else
+        result="$(bc -l <<< "scale=2; $bytes / 1073741824") GB"
+    fi
+
+    echo "$result"
+}
+
 # Get start time
 START_TIME=$(date +"%s")
 
@@ -47,10 +64,12 @@ do
 
     if [ $? -eq 0 ]; then
         display_success "Backup completed: $SOURCE_DIR"
-
+        
+        sentBytes=$(echo "$rsync_output" | grep -oP 'sent \K[0-9]+')
+        totalBytes=$(echo "$rsync_output" | grep -oP 'total size is \K[0-9]+')
         result="*Backup completed*: $SOURCE_DIR%0A"
-        result+="Amount sent: + $(echo "$rsync_output" | grep -oP 'sent \K[0-9]+')%0A"
-        result+="Total Size: + $(echo "$rsync_output" | grep -oP 'total size is \K[0-9]+')%0A"
+        result+="Amount sent: $(convert_bytes $sentBytes)%0A"
+        result+="Total Size: $(convert_bytes $totalBytes)%0A"
     else
         display_error "Backup failed: $SOURCE_DIR"
         result="*Backup failed*: $SOURCE_DIR"
